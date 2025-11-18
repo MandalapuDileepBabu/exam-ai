@@ -1,0 +1,131 @@
+/* -------------------------- */
+/*     FLOATING OM BUTTON     */
+/* -------------------------- */
+.omButton {
+  position: fixed;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  background: transparent;             /* Sticker look */
+  border: none;
+  color: #e6eef7;
+  font-weight: 900;
+  font-size: 30px;                     /* Larger clean Om */
+  cursor: pointer;
+  z-index: 20004;
+  opacity: 0.85;
+  transition: transform 0.18s ease, opacity 0.18s ease, text-shadow 0.18s ease;
+}
+
+.omButton:hover {
+  transform: translateY(-50%) scale(1.15);
+  opacity: 1;
+  text-shadow: 0 0 14px rgba(20,184,166,0.7); /* glow */
+}
+
+.omButton.active {
+  text-shadow: 0 0 18px rgba(20,184,166,0.9);
+}
+
+
+/* -------------------------- */
+/*         SIDEBAR PANEL      */
+/* -------------------------- */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -260px;                        /* Hidden by default */
+  width: 260px;
+  height: 100vh;
+  background: rgba(8,11,18,0.93);      /* Fits your theme */
+  border-right: 1px solid rgba(255,255,255,0.06);
+  padding: 12px;
+  z-index: 20005;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(8px);
+  transition: left 0.22s ease;
+}
+
+.sidebar.show {
+  left: 0;                             /* Slide-in */
+}
+
+
+/* -------------------------- */
+/*       HEADER SECTION       */
+/* -------------------------- */
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.sidebarTitle {
+  font-size: 17px;
+  font-weight: 800;
+  color: #e6eef7;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: #e6eef7;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+
+/* -------------------------- */
+/*        SESSION BLOCKS      */
+/* -------------------------- */
+.section {
+  margin-top: 12px;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  color: #e6eef7;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+
+
+/* -------------------------- */
+/*       SESSION LIST         */
+/* -------------------------- */
+.sessionList {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sessionItem {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  color: #e6eef7;
+  font-weight: 600;
+  transition: background 0.15s ease, border 0.15s ease;
+}
+
+.sessionItem:hover {
+  background: rgba(255,255,255,0.07);
+}
+
+
+/* -------------------------- */
+/*         EMPTY TEXT         */
+/* -------------------------- */
+.empty {
+  color: rgba(230,238,247,0.7);
+  font-size: 13px;
+  padding: 6px;
+}

@@ -1,0 +1,328 @@
+  /* Profile.module.css */
+
+  /* ---------- Page & Background ---------- */
+.profilePage {
+  min-height: 100vh;
+  width: 100%;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat;
+  display: flex;
+  flex-direction: column;
+  color: #f8fafc;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial;
+  position: relative;
+  overflow: hidden;
+  z-index: 0; /* FIX */
+}
+
+.profilePage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* FIX */
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 45%, #0d9488 100%);
+  background-attachment: fixed;
+}
+
+
+  /* Make the whole page non-draggable when at top handled in JS (optional) */
+  .profilePage * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Hidden file inputs */
+  .hiddenInput {
+    display: none;
+  }
+
+  /* ---------- Header ---------- */
+  .header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* center title naturally */
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.25rem 1.5rem;
+    box-sizing: border-box;
+  }
+
+  /* left area for Back button (keeps it left-aligned) */
+  .leftSection {
+    position: absolute;
+    left: 20px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* right area for Change/Remove/Logout */
+  .headerActions {
+    position: absolute;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .backBtn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.06);
+    color: #e6eef7;
+    padding: 0.45rem 0.85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.18s ease;
+  }
+  .backBtn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+
+  .title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #e6eef7;
+    margin: 0;
+    text-align: center;
+  }
+
+  /* ---------- Main scrollable area ---------- */
+  .main {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+    box-sizing: border-box;
+
+    /* make scrollable area that fits between header & footer */
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* ensure main fills available vertical space */
+  .profilePage > .main {
+    max-height: calc(100vh - 140px);
+  }
+
+  /* ---------- Profile Card (transparent) ---------- */
+  .profileCard {
+    width: 100%;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 1.75rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.01);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    border: none;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    align-items: stretch;
+  }
+
+  /* ---------- Profile image area ---------- */
+  .profileImageContainer {
+    width: 120px;
+    height: 120px;
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.08);
+    transition: transform 0.18s ease;
+  }
+  .profileImageContainer:hover { transform: translateY(-3px); }
+
+  .profileImage {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.04);
+  }
+
+  /* ---------- Description (About Me) ---------- */
+  .description {
+    color: #e6eef7;
+    font-size: 0.98rem;
+    line-height: 1.6;
+    text-align: center;
+    margin: 0 0.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* ---------- Info Section (rows) ---------- */
+  .infoSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+    padding-top: 0.75rem;
+  }
+
+  .infoRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .label {
+    font-weight: 700;
+    color: rgba(230,238,247,0.95);
+  }
+
+  .value {
+    color: rgba(230,238,247,0.90);
+    max-width: 60%;
+    text-align: right;
+    word-break: break-word;
+  }
+
+  /* ---------- Inputs used in edit mode ---------- */
+  .editInput {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.02);
+    color: #e6eef7;
+    font-weight: 600;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .editInput:focus {
+    border-color: rgba(20,184,166,0.95);
+    box-shadow: 0 6px 16px rgba(20,184,166,0.06);
+  }
+
+  /* textarea style for description editing */
+  .editInput[type="textarea"],
+  textarea.editInput { min-height: 86px; resize: vertical; padding-top: 0.75rem; }
+
+  /* ---------- Achievements / Badges ---------- */
+  .achievements { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.03); }
+
+  .achievements h3 { margin: 0 0 0.5rem 0; color: #e6eef7; font-size: 1.02rem; }
+
+  .badgeList { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; padding: 0; list-style: none; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(90deg, rgba(20,184,166,0.12), rgba(59,130,246,0.08));
+    color: #e6fdf9;
+    padding: 0.45rem 0.65rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    border: 1px solid rgba(255,255,255,0.04);
+    box-shadow: 0 6px 18px rgba(8,10,20,0.25);
+  }
+
+  /* Add achievement button (edit only) */
+  .addBadgeBtn {
+    margin-top: 0.5rem;
+    background: transparent;
+    color: #cfeee6;
+    border: 1px dashed rgba(255,255,255,0.06);
+    padding: 0.45rem 0.65rem;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  /* ---------- Action Buttons ---------- */
+  .actionButtons {
+    display: flex;
+    gap: 0.7rem;
+    justify-content: center;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .editProfileBtn, .changePasswordBtn, .saveBtn, .cancelBtn {
+    padding: 0.65rem 1rem;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    min-width: 140px;
+    box-sizing: border-box;
+  }
+
+  /* primary action */
+  .editProfileBtn, .saveBtn {
+    background: linear-gradient(90deg, #14b8a6, #3b82f6);
+    color: white;
+    box-shadow: 0 8px 30px rgba(20,184,166,0.12);
+  }
+  .editProfileBtn:hover, .saveBtn:hover { transform: translateY(-2px); }
+
+  /* secondary action */
+  .changePasswordBtn, .cancelBtn {
+    background: transparent;
+    color: #e6eef7;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .cancelBtn:hover, .changePasswordBtn:hover { transform: translateY(-2px); }
+
+  /* Logout button distinct color */
+  .logoutBtn {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+    color: #fff;
+    font-weight: 700;
+    padding: 0.45rem 0.85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.25s ease;
+  }
+  .logoutBtn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(220,38,38,0.25); }
+
+  /* ---------- Footer ---------- */
+  .footer {
+    padding: 1rem;
+    text-align: center;
+    color: rgba(255,255,255,0.7);
+    font-size: 0.9rem;
+  }
+
+  /* ---------- Loading ---------- */
+  .loading { min-height: 70vh; display: flex; align-items: center; justify-content: center; color: #e6eef7; }
+  .loadingText { font-weight: 700; color: #e6eef7; }
+
+  /* ---------- Scrollbar cosmetic ---------- */
+  .main::-webkit-scrollbar { width: 10px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 999px; border: 2px solid transparent; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 900px) {
+    .profileCard { padding: 1.25rem; }
+    .profileImageContainer { width: 100px; height: 100px; }
+    .title { font-size: 1.1rem; }
+    .infoRow { gap: 0.6rem; }
+    .badge { font-size: 0.85rem; padding: 0.35rem 0.55rem; }
+  }
+
+  @media (max-width: 600px) {
+    .header { padding: 0.8rem 0.9rem; }
+    .main { padding: 0.8rem; max-height: calc(100vh - 120px); }
+    .profileCard { padding: 1rem; }
+    .profileImageContainer { width: 84px; height: 84px; }
+    .actionButtons { flex-direction: column; }
+    .editProfileBtn, .saveBtn, .changePasswordBtn, .cancelBtn { min-width: 100%; }
+  }

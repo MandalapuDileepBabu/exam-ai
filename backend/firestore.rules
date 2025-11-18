@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // users can only read/write their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // uploads: user can only see their uploads
+    match /uploads/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.ownerUid;
+    }
+
+    // admin and audit logs: read-only for backend
+    match /admin_actions/{docId} {
+      allow read, write: if false; // no client access
+    }
+
+    match /privilege_audit/{docId} {
+      allow read, write: if false; // backend only
+    }
+
+    // notifications and activity logs: user-specific access
+    match /notifications/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /activity_logs/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userUid;
+    }
+  }
+}

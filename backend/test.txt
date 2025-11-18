@@ -1,0 +1,1301 @@
+// src/pages/SubjectsPractice.tsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import styles from "../styles/subjects.module.css";
+import ChatPopup from "../components/ChatPopup";
+import OmSidebar from "../components/OmSidebar";
+
+/**
+ * PART 1/4
+ * - Top of file: imports, types
+ * - New hooks / helper functions (progress, flags, timer, save/load, AI helper)
+ * - Main component initial state + subject fetch + generateQuestions
+ *
+ * NOTE:
+ * This is a drop-in continuation for your original file. The rest (UI, navigator, review mode, styles) arrives in subsequent parts.
+ */
+
+/* =========================
+   Types & Constants
+   ========================= */
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+type Toast = { id: number; text: string; kind?: "info" | "error" | "success" };
+type OptionSet = { A: string; B: string; C: string; D: string };
+type QuestionObj = {
+  id: string;
+  type: "MCQ" | "MSQ" | "NAT";
+  marks: number;
+  question: string;
+  options: OptionSet;
+  correctAnswer?: string;
+  explanation?: string;
+};
+
+/* =========================
+   NEW HOOKS & HELPERS
+   (use these inside the component)
+   ========================= */
+
+/** Progress hook: manage current question index & navigation */
+function useQuestionProgress(total: number) {
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+
+  useEffect(() => {
+    // if total decreased, clamp index
+    setCurrentIndex((i) => Math.min(i, Math.max(0, total - 1)));
+  }, [total]);
+
+  const goNext = () => setCurrentIndex((i) => Math.min(i + 1, Math.max(0, total - 1)));
+  const goPrev = () => setCurrentIndex((i) => Math.max(i - 1, 0));
+  const jumpTo = (i: number) => setCurrentIndex(Math.max(0, Math.min(i, Math.max(0, total - 1))));
+
+  return { currentIndex, setCurrentIndex, goNext, goPrev, jumpTo };
+}
+
+/** Flagging hook: lightweight Set based flags */
+function useFlagging() {
+  const [flags, setFlags] = useState<Set<string>>(new Set());
+
+  const toggleFlag = (id: string) => {
+    setFlags((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const hasFlag = (id: string) => flags.has(id);
+
+  // helper to export/import flag list as array
+  const asArray = () => Array.from(flags);
+  const loadFromArray = (arr: string[] = []) => setFlags(new Set(arr));
+
+  return { flags, toggleFlag, hasFlag, asArray, loadFromArray };
+}
+
+/** Timer hook: returns elapsed seconds while active */
+function useExamTimer(isActive: boolean) {
+  const [timer, setTimer] = useState<number>(0);
+  const startedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let t: ReturnType<typeof setInterval> | null = null;
+    if (isActive) {
+      if (startedRef.current == null) startedRef.current = Date.now();
+      t = setInterval(() => setTimer((s) => s + 1), 1000);
+    } else {
+      // leave timer value intact (do not reset)
+      if (t) clearInterval(t);
+    }
+    return () => {
+      if (t) clearInterval(t);
+    };
+  }, [isActive]);
+
+  const reset = (to = 0) => {
+    setTimer(to);
+    startedRef.current = to === 0 ? null : Date.now();
+  };
+
+  return { timer, reset, setTimer };
+}
+
+/** Save / load session helpers: localStorage fallback for quick resume */
+function saveSessionLocal(session: any) {
+  try {
+    localStorage.setItem("exam_ai_practice_session_v2", JSON.stringify(session));
+  } catch (e) {
+    // ignore or optionally console.warn
+    console.warn("saveSessionLocal failed", e);
+  }
+}
+function loadSessionLocal() {
+  try {
+    const raw = localStorage.getItem("exam_ai_practice_session_v2");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn("loadSessionLocal failed", e);
+    return null;
+  }
+}
+function clearSavedSessionLocal() {
+  try {
+    localStorage.removeItem("exam_ai_practice_session_v2");
+  } catch (e) {
+    // ignore
+  }
+}
+
+/** AI helper — ask study API for a single question's context
+ *  returns reply text or throws
+ */
+async function sendQuestionHelp(apiBase: string, token: string, question: QuestionObj, extra = {}) {
+  const payload = {
+    message: `Explain and solve this question with short steps. Return a concise explanation and optionally tips for similar problems.`,
+    question,
+    newSession: false,
+    ...extra,
+  };
+
+  const res = await fetch(`${apiBase}/ai/study`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`AI help request failed: ${res.status} ${text}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  // flexible: try common return shapes
+  const reply = data.reply ?? data.text ?? data.answer ?? data.data ?? "";
+  return reply;
+}
+
+/* =========================
+   Utility: robust JSON extractor (from LLM raw)
+   ========================= */
+function extractJSONArrayFromText(text: string) {
+  // attempt to find first '[' ... last ']' and parse
+  try {
+    const first = text.indexOf("[");
+    const last = text.lastIndexOf("]");
+    if (first >= 0 && last > first) {
+      const slice = text.slice(first, last + 1);
+      return JSON.parse(slice);
+    }
+    return JSON.parse(text);
+  } catch (err) {
+    console.warn("extractJSONArrayFromText parse error", err);
+    return null;
+  }
+}
+
+/* =========================
+   Main component start
+   ========================= */
+
+export default function SubjectsPractice(): JSX.Element {
+  /* --------------- auth + misc --------------- */
+  const token = (typeof window !== "undefined" && localStorage.getItem("exam_ai_token")) || "";
+  const user = (typeof window !== "undefined" && JSON.parse(localStorage.getItem("exam_ai_user") || "null")) || {};
+  const exam = (user?.preferredExam || user?.exam || "GATE").toString();
+
+  /* --------------- UI State --------------- */
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [subject, setSubject] = useState<string>("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [difficulty, setDifficulty] = useState<"Easy" | "Medium" | "Hard">("Easy");
+  const [count, setCount] = useState<number>(10);
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [questions, setQuestions] = useState<QuestionObj[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<any | null>(null);
+
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [mentorToken] = useState<string>(token);
+  const [omToken] = useState<string>(token);
+
+  const [messages, setMessages] = useState<{ id: string; role: "user" | "assistant"; text: string }[]>([]);
+  const [bottomChatInput, setBottomChatInput] = useState("");
+
+  const [examMode, setExamMode] = useState(false);
+  const examModeRef = useRef(false);
+
+  /* NEW: loading flags */
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(true);
+  const [loadingGenerate, setLoadingGenerate] = useState<boolean>(false);
+
+  /* NEW: restore state guard */
+  const [restored, setRestored] = useState<boolean>(false);
+
+  /* refs */
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  /* ---------- new hooks usage ---------- */
+  const { currentIndex, setCurrentIndex, goNext, goPrev, jumpTo } = useQuestionProgress(questions.length);
+  const { flags, toggleFlag, hasFlag, asArray, loadFromArray } = useFlagging();
+  const { timer, reset: resetTimer } = useExamTimer(examMode);
+
+  const [isReviewMode, setIsReviewMode] = useState(false);
+
+  /* ---------- toasts ---------- */
+  const pushToast = (text: string, kind: Toast["kind"] = "info", ms = 3000) => {
+    const id = Date.now() + Math.floor(Math.random() * 999);
+    setToasts((t) => [...t, { id, text, kind }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), ms);
+  };
+
+  /* -------------------------
+     Fetch subjects (with loader)
+     ------------------------- */
+  useEffect(() => {
+    let mounted = true;
+    setLoadingSubjects(true);
+    fetch(`${API}/subjects/${encodeURIComponent(exam)}/subjects`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!mounted) return;
+        if (d?.ok && Array.isArray(d.subjects)) {
+          setSubjects(d.subjects);
+          if (!subject && d.subjects.length) setSubject(d.subjects[0]);
+        } else if (Array.isArray(d)) {
+          // some backends return array directly
+          setSubjects(d);
+          if (!subject && d.length) setSubject(d[0]);
+        } else {
+          setSubjects([]);
+          pushToast("No subjects returned from server.", "error");
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching subjects:", err);
+        setSubjects([]);
+        pushToast("Failed to fetch subjects.", "error");
+      })
+      .finally(() => {
+        setLoadingSubjects(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exam, token]);
+
+  /* =========================
+     Generator prompt builder + parse
+     ========================= */
+  const buildPromptJSON = (opts: { exam: string; subject: string; difficulty: string; count: number }) => {
+    const { exam, subject, difficulty, count } = opts;
+    const difficultyNote =
+      difficulty === "Easy"
+        ? "Easy: straightforward one-step problems."
+        : difficulty === "Medium"
+        ? "Medium: typical exam multi-step problems."
+        : "Hard: tricky multi-concept problems.";
+
+    return `
+You are an exam question generator. Produce exactly ${count} questions for the exam "${exam}" and subject "${subject}".
+Output MUST be a JSON array of objects with keys:
+id, type ("MCQ"|"MSQ"|"NAT"), marks (1|2), question (string), options (object A,B,C,D; NAT may be empty strings), correctAnswer (A|B|C|D or comma-separated for MSQ or numeric for NAT), explanation (short).
+Use ${difficultyNote}
+Return only the JSON array.
+`.trim();
+  };
+
+  const parseMaybeJSON = (text: string) => {
+    try {
+      const parsed = extractJSONArrayFromText(typeof text === "string" ? text : JSON.stringify(text));
+      return parsed;
+    } catch (err) {
+      console.warn("parse error", err);
+      return null;
+    }
+  };
+
+  /* ---------- generateQuestions (uses backend Gemini route) ---------- */
+  const generateQuestions = async () => {
+    if (!subject) {
+      pushToast("Select a subject first", "error");
+      return;
+    }
+    setIsGenerating(true);
+    setLoadingGenerate(true);
+    pushToast("Generating questions…");
+
+    const prompt = buildPromptJSON({ exam, subject, difficulty, count });
+
+    try {
+      const res = await fetch(`${API}/gemini/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ prompt, model: "gemini-2.5-flash", numQuestions: count }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data) {
+        pushToast("Generate failed: " + (data?.message || res.statusText || "unknown error"), "error");
+        setIsGenerating(false);
+        setLoadingGenerate(false);
+        return;
+      }
+
+      const raw = data.data ?? data.text ?? data.output ?? JSON.stringify(data);
+      const parsed = parseMaybeJSON(typeof raw === "string" ? raw : JSON.stringify(raw));
+      if (!parsed || !Array.isArray(parsed)) {
+        // last-ditch: if data.choices?.[0]?.text exists (openai-like)
+        const alt = (data.choices && data.choices[0] && data.choices[0].text) || raw;
+        const parsedAlt = parseMaybeJSON(typeof alt === "string" ? alt : JSON.stringify(alt));
+        if (parsedAlt && Array.isArray(parsedAlt)) {
+          // use parsedAlt
+          const qs = parsedAlt.map((it: any, idx: number) => {
+            const id = String(it.id ?? `q${Date.now()}_${idx}`);
+            const type = (it.type ?? "MCQ").toUpperCase();
+            const marks = Number(it.marks || (idx % 3 === 0 ? 2 : 1));
+            const opts = it.options ?? { A: "", B: "", C: "", D: "" };
+            return {
+              id,
+              type,
+              marks: marks === 2 ? 2 : 1,
+              question: it.question ?? (it.text ?? ""),
+              options: {
+                A: opts.A ?? opts.a ?? "",
+                B: opts.B ?? opts.b ?? "",
+                C: opts.C ?? opts.c ?? "",
+                D: opts.D ?? opts.d ?? "",
+              },
+              correctAnswer: it.correctAnswer ?? "",
+              explanation: it.explanation ?? "",
+            } as QuestionObj;
+          });
+          setQuestions(qs);
+          setAnswers({});
+          setResults(null);
+          // autosave initial session
+          saveSessionLocal({ exam, subject, difficulty, questions: qs, answers: {}, flags: asArray(), createdAt: new Date().toISOString() });
+          pushToast(`Generated ${qs.length} questions.`, "success");
+        } else {
+          pushToast("Failed to parse generated questions.", "error");
+          console.log("Raw generator output:", raw);
+          setIsGenerating(false);
+          setLoadingGenerate(false);
+          return;
+        }
+      } else {
+        // parsed is array
+        const qs: QuestionObj[] = parsed.map((it: any, idx: number) => {
+          const id = String(it.id ?? `q${Date.now()}_${idx}`);
+          const type = (it.type ?? "MCQ").toUpperCase() as any;
+          const marks = Number(it.marks || (idx % 3 === 0 ? 2 : 1));
+          const opts = it.options ?? { A: "", B: "", C: "", D: "" };
+          return {
+            id,
+            type,
+            marks: marks === 2 ? 2 : 1,
+            question: it.question ?? (it.text ?? ""),
+            options: {
+              A: opts.A ?? opts.a ?? "",
+              B: opts.B ?? opts.b ?? "",
+              C: opts.C ?? opts.c ?? "",
+              D: opts.D ?? opts.d ?? "",
+            },
+            correctAnswer: it.correctAnswer ?? "",
+            explanation: it.explanation ?? "",
+          } as QuestionObj;
+        });
+
+        setQuestions(qs);
+        setAnswers({});
+        setResults(null);
+        // autosave initial session
+        saveSessionLocal({ exam, subject, difficulty, questions: qs, answers: {}, flags: asArray(), createdAt: new Date().toISOString() });
+        pushToast(`Generated ${qs.length} questions.`, "success");
+      }
+
+      // optional: send raw to backend for archival (non-blocking)
+      (async () => {
+        try {
+          await fetch(`${API}/ai/saveGeneratedQuestions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ rawText: typeof raw === "string" ? raw : JSON.stringify(raw), exam, subject, difficulty }),
+          });
+        } catch (e) {
+          // optional failure to save shouldn't block user
+          console.warn("saveGeneratedQuestions optional call failed", e);
+        }
+      })();
+    } catch (err) {
+      console.error("generate error", err);
+      pushToast("Error requesting practice set.", "error");
+    } finally {
+      setIsGenerating(false);
+      setLoadingGenerate(false);
+    }
+  };
+
+  /* ---------- Restore saved session on first load ---------- */
+  useEffect(() => {
+    if (restored) return;
+    const saved = loadSessionLocal();
+    if (saved && Array.isArray(saved.questions) && saved.questions.length > 0) {
+      // restore minimal pieces
+      setQuestions(saved.questions);
+      setAnswers(saved.answers ?? {});
+      if (saved.subject) setSubject(saved.subject);
+      if (saved.difficulty) setDifficulty(saved.difficulty);
+      if (saved.flags) loadFromArray(saved.flags);
+      pushToast("Resumed previous practice session (local).", "info");
+    }
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+/* --------------------------------------------------------------------
+   PART 2/4 — QUESTION VIEW, NAVIGATION, FLAGGING, AI HELP, REVIEW MODE
+--------------------------------------------------------------------- */
+
+/* ---------- Answer setter with autosave ---------- */
+const setAnswerFor = (qid: string, val: string) => {
+  setAnswers((a) => {
+    const updated = { ...a, [qid]: val };
+
+    // NEW: autosave session on answer
+    saveSessionLocal({
+      exam,
+      subject,
+      difficulty,
+      questions,
+      answers: updated,
+      flags: asArray(),
+      createdAt: new Date().toISOString(),
+    });
+
+    return updated;
+  });
+};
+
+/* ---------- Scroll-to-bottom for messages or page change ---------- */
+useEffect(() => {
+  if (contentRef.current) {
+    contentRef.current.scrollTop = contentRef.current.scrollHeight;
+  }
+}, [messages.length, questions.length]);
+
+/* ---------- Review Mode Toggle Helper ---------- */
+const enterReviewMode = () => {
+  setIsReviewMode(true);
+  disableExamMode(); // if in exam mode, exit safely
+};
+
+/* ---------- Timer Display Helper ---------- */
+const formatTime = (s: number) => {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+};
+
+/* --------------------------------------------------------------------
+   MAIN UI RENDERING BEGINS HERE
+--------------------------------------------------------------------- */
+return (
+  <div className={styles.page}>
+    <header className={styles.header}>
+      <button className={styles.backBtn} onClick={() => window.history.back()}>
+        ← Back
+      </button>
+
+      {/* NEW: Timer + Question Counter */}
+      {questions.length > 0 && (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontWeight: 800 }}>
+            Question {currentIndex + 1} / {questions.length}
+          </div>
+          {examMode && (
+            <div style={{ fontWeight: 700, opacity: 0.9 }}>
+              ⏱ {formatTime(timer)}
+            </div>
+          )}
+        </div>
+      )}
+
+      <button
+        className={styles.logoutBtn}
+        onClick={() => {
+          localStorage.removeItem("exam_ai_token");
+          localStorage.removeItem("exam_ai_user");
+          clearSavedSessionLocal();
+          window.location.href = "/";
+        }}
+      >
+        Logout
+      </button>
+    </header>
+
+    <main className={styles.flowMain}>
+      {/* Skeleton for loading subjects */}
+      {loadingSubjects && (
+        <div style={{ padding: 12, opacity: 0.8 }}>Loading subjects…</div>
+      )}
+
+      <p className={styles.motivationText}>
+        Keep pushing forward — practice consistently and you'll conquer it.
+      </p>
+
+      {/* The Filter Row (Subject Select + Difficulty + Count + Generate) */}
+      {/* (This remains your same UI from before; no change) */}
+      {/* -------------------------------------------------------------- */}
+
+      <div className={styles.filterRowInline}>
+        {/* subject dropdown stays unchanged */}
+        <div className={styles.customSelectWrap} ref={dropdownRef}>
+          <button
+            className={styles.customSelectTrigger}
+            onClick={() => setDropdownOpen((p) => !p)}
+          >
+            <span>
+              {subject || (subjects.length ? "Select subject" : "Loading…")}
+            </span>
+            <span className={styles.caret}>
+              {dropdownOpen ? "▲" : "▼"}
+            </span>
+          </button>
+
+          {dropdownOpen && (
+            <div className={`${styles.customDropdown} ${styles.open}`}>
+              <div className={styles.subjectList}>
+                {subjects.map((s, idx) => (
+                  <div
+                    key={s}
+                    className={`${styles.subjectListItem} ${
+                      subject === s ? styles.subjectSelected : ""
+                    }`}
+                    onClick={() => {
+                      setSubject(s);
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    {s}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <select
+          className={styles.inlineSelect}
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value as any)}
+        >
+          <option>Easy</option>
+          <option>Medium</option>
+          <option>Hard</option>
+        </select>
+
+        <input
+          className={styles.inlineNumber}
+          type="number"
+          min={1}
+          max={50}
+          value={count}
+          onChange={(e) => setCount(Number(e.target.value))}
+        />
+
+        <button
+          className={styles.generateBtn}
+          onClick={generateQuestions}
+          disabled={!subject || isGenerating}
+        >
+          {isGenerating ? "Generating…" : "Generate"}
+        </button>
+
+        {/* EXAM MODE BUTTON */}
+        {questions.length > 0 && (
+          <button
+            className={styles.generateBtn}
+            style={{
+              marginLeft: 8,
+              background: examMode ? "#ef4444" : undefined,
+            }}
+            onClick={() => {
+              if (!questions.length) {
+                pushToast("Generate questions first", "error");
+                return;
+              }
+              setExamMode((e) => !e);
+              if (!examMode) {
+                // entering exam mode
+                resetTimer(); // reset timer to 0
+                pushToast("Exam mode enabled — entering fullscreen", "info");
+              } else {
+                pushToast("Exam mode disabled", "info");
+                disableExamMode();
+              }
+            }}
+          >
+            {examMode ? "Exit Test" : "Take Exam"}
+          </button>
+        )}
+      </div>
+
+      {/* --------------------------------------------------------------
+         MAIN CONTENT AREA
+      ---------------------------------------------------------------- */}
+      <div
+        ref={contentRef}
+        className={styles.contentArea}
+        style={{
+          overflowY: "auto",
+          padding: "0.6rem",
+        }}
+      >
+        {/* Render AI study chat messages */}
+        {messages.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    m.role === "user" ? "flex-end" : "flex-start",
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  className={`${styles.messageCard} ${
+                    m.role === "user"
+                      ? styles.messageUser
+                      : styles.messageAssistant
+                  }`}
+                >
+                  <div className={styles.messageText}>{m.text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* --------------------------------------------------------------
+            NEW: QUESTION NAVIGATOR
+        -------------------------------------------------------------- */}
+        {questions.length > 0 && !isReviewMode && (
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              flexWrap: "wrap",
+              marginBottom: 12,
+            }}
+          >
+            {questions.map((q, idx) => (
+              <button
+                key={q.id}
+                onClick={() => jumpTo(idx)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                  background:
+                    currentIndex === idx
+                      ? "linear-gradient(90deg,#14b8a6,#3b82f6)"
+                      : "rgba(255,255,255,0.08)",
+                  color: currentIndex === idx ? "#041f1a" : "#e6eef7",
+                }}
+              >
+                {idx + 1}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* --------------------------------------------------------------
+            QUESTION CARDS (single question shown or all for review)
+        -------------------------------------------------------------- */}
+        {questions.length > 0 && (
+          <>
+            {/* REVIEW MODE: Show all questions */}
+            {isReviewMode ? (
+              <div style={{ display: "grid", gap: 14 }}>
+                {questions.map((q, idx) => (
+                  <QuestionCard
+                    key={q.id}
+                    q={q}
+                    idx={idx}
+                    answers={answers}
+                    results={results}
+                    isReviewMode={true}
+                    hasFlag={hasFlag(q.id)}
+                    toggleFlag={toggleFlag}
+                    sendQuestionHelp={() =>
+                      handleAIHelpForQuestion(q, idx)
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              /* NORMAL MODE: Show single question */
+              <QuestionCard
+                q={questions[currentIndex]}
+                idx={currentIndex}
+                answers={answers}
+                results={results}
+                isReviewMode={false}
+                hasFlag={hasFlag(questions[currentIndex].id)}
+                toggleFlag={toggleFlag}
+                sendQuestionHelp={() =>
+                  handleAIHelpForQuestion(
+                    questions[currentIndex],
+                    currentIndex
+                  )
+                }
+                setAnswerFor={setAnswerFor}
+              />
+            )}
+          </>
+        )}
+
+        {/* --------------------------------------------------------------
+            RESULTS SUMMARY
+        -------------------------------------------------------------- */}
+        {results && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 12,
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.05)",
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 16 }}>
+              Score: {results.score?.obtained} / {results.score?.totalMarks}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              Correct: {results.score?.correctCount}
+            </div>
+          </div>
+        )}
+
+        {/* --------------------------------------------------------------
+            REVIEW MODE PANEL
+        -------------------------------------------------------------- */}
+        {isReviewMode && (
+          <div
+            style={{
+              marginTop: 20,
+              padding: 12,
+              borderRadius: 12,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.05)",
+            }}
+          >
+            <h3 style={{ margin: 0, fontWeight: 900 }}>Review Mode</h3>
+            <p style={{ opacity: 0.9 }}>
+              Your answers are shown along with correct answers.
+            </p>
+          </div>
+        )}
+
+        {/* --------------------------------------------------------------
+            NAVIGATION (PREV / NEXT) — only in normal mode
+        -------------------------------------------------------------- */}
+        {questions.length > 0 && !isReviewMode && (
+          <div
+            style={{
+              marginTop: 20,
+              display: "flex",
+              justifyContent: "space-between",
+              paddingBottom: 20,
+            }}
+          >
+            <button
+              onClick={goPrev}
+              disabled={currentIndex === 0}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.06)",
+                color: "#e6eef7",
+                border: "1px solid rgba(255,255,255,0.08)",
+                fontWeight: 700,
+              }}
+            >
+              ← Previous
+            </button>
+
+            <button
+              onClick={goNext}
+              disabled={currentIndex === questions.length - 1}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 10,
+                background:
+                  currentIndex === questions.length - 1
+                    ? "rgba(255,255,255,0.04)"
+                    : "linear-gradient(90deg,#14b8a6,#3b82f6)",
+                color: "#fff",
+                border: "none",
+                fontWeight: 800,
+              }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+
+        {/* End of content area */}
+      </div>
+    </main>
+/* --------------------------------------------------------------------
+   PART 3/4 — SUBMIT, EXAM MODE, QUESTION CARD COMPONENT, AI HELP, CHAT BAR
+--------------------------------------------------------------------- */
+
+/* ============================================================
+   AI HELP HANDLER (single question)
+============================================================ */
+async function handleAIHelpForQuestion(q: QuestionObj, idx: number) {
+  try {
+    const reply = await sendQuestionHelp(API, token, q, {
+      questionIndex: idx,
+    });
+
+    // Append the AI reply to subject-scoped bottom chat
+    const msgId = `ai_help_${Date.now()}`;
+    setMessages((m) => [
+      ...m,
+      { id: msgId, role: "assistant", text: reply },
+    ]);
+    setChatOpen(true);
+  } catch (err: any) {
+    pushToast("AI help failed", "error");
+  }
+}
+
+/* ============================================================
+   SUBMIT ALL QUESTIONS (GRADE + REVIEW MODE)
+============================================================ */
+const submitAll = async () => {
+  if (!questions.length) {
+    pushToast("No questions to submit", "error");
+    return;
+  }
+
+  const payloadQuestions = questions.map((q) => ({
+    id: q.id,
+    type: q.type,
+    marks: q.marks,
+    question: q.question,
+    options: q.options,
+    correctAnswer: q.correctAnswer,
+    explanation: q.explanation,
+  }));
+
+  try {
+    const res = await fetch(`${API}/exams/submit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        exam,
+        subject,
+        difficulty,
+        questions: payloadQuestions,
+        answers,
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      setResults(data);
+      setIsReviewMode(true);
+
+      clearSavedSessionLocal();
+      pushToast("Exam submitted — results ready", "success");
+
+      disableExamMode(); // exit fullscreen mode if active
+    } else {
+      pushToast("Submit failed: " + (data?.message || "unknown"), "error");
+    }
+  } catch (err) {
+    console.error("submit error", err);
+    pushToast("Failed to submit exam", "error");
+  }
+};
+
+/* ============================================================
+   NEW PSEUDO-COMPONENT: QuestionCard
+============================================================ */
+function QuestionCard({
+  q,
+  idx,
+  answers,
+  results,
+  isReviewMode,
+  hasFlag,
+  toggleFlag,
+  sendQuestionHelp,
+  setAnswerFor,
+}: {
+  q: QuestionObj;
+  idx: number;
+  answers: Record<string, string>;
+  results: any;
+  isReviewMode: boolean;
+  hasFlag: boolean;
+  toggleFlag: (id: string) => void;
+  sendQuestionHelp: () => void;
+  setAnswerFor?: (id: string, val: string) => void;
+}) {
+  const answered = answers[q.id] ?? "";
+
+  // result detail for this question
+  const detail =
+    results &&
+    results.details &&
+    results.details.find((d: any) => d.id === q.id);
+
+  return (
+    <div className={styles.questionCard}>
+      {/* Question Header */}
+      <div className={styles.questionHeader}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "baseline",
+            width: "100%",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ fontWeight: 800 }}>
+            <span className={styles.qIndex}>{idx + 1}.</span>{" "}
+            <span className={styles.qText}>{q.question}</span>
+          </div>
+
+          <div style={{ fontWeight: 800, opacity: 0.85 }}>
+            {q.marks}m • {q.type}
+          </div>
+        </div>
+      </div>
+
+      {/* FLAG BUTTON */}
+      <button
+        onClick={() => toggleFlag(q.id)}
+        style={{
+          marginTop: 10,
+          marginBottom: 10,
+          padding: "4px 10px",
+          borderRadius: 8,
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: hasFlag
+            ? "rgba(251,191,36,0.15)"
+            : "rgba(255,255,255,0.02)",
+          color: hasFlag ? "#fbbf24" : "#e6eef7",
+          fontWeight: 700,
+        }}
+      >
+        {hasFlag ? "★ Flagged" : "☆ Flag"}
+      </button>
+
+      {/* OPTIONS OR INPUT */}
+      <div className={styles.optionsWrap}>
+        {q.type !== "NAT" &&
+          (["A", "B", "C", "D"] as const).map((opt) => (
+            <label
+              key={opt}
+              className={styles.optionItem}
+              style={{
+                background:
+                  answered.toUpperCase().includes(opt) && !isReviewMode
+                    ? "rgba(59,130,246,0.15)"
+                    : "transparent",
+              }}
+            >
+              <input
+                type={q.type === "MSQ" ? "checkbox" : "radio"}
+                name={`q_${q.id}`}
+                value={opt}
+                disabled={isReviewMode}
+                checked={
+                  q.type === "MSQ"
+                    ? answered
+                        .split(",")
+                        .map((x) => x.trim().toUpperCase())
+                        .includes(opt)
+                    : answered.toUpperCase() === opt
+                }
+                onChange={(e) => {
+                  if (!setAnswerFor) return; // review mode
+                  if (q.type === "MSQ") {
+                    const split = answered
+                      .split(",")
+                      .map((x) => x.trim())
+                      .filter(Boolean);
+                    const isChecked = (e.target as HTMLInputElement).checked;
+                    let updated = [...split];
+                    if (isChecked) {
+                      updated = Array.from(new Set([...split, opt]));
+                    } else {
+                      updated = split.filter((x) => x !== opt);
+                    }
+                    setAnswerFor(q.id, updated.join(","));
+                  } else {
+                    setAnswerFor(q.id, opt);
+                  }
+                }}
+              />
+              <div style={{ fontWeight: 700, minWidth: 20 }}>{opt})</div>
+              <div style={{ opacity: 0.95 }}>{q.options[opt]}</div>
+            </label>
+          ))}
+
+        {q.type === "NAT" && (
+          <input
+            className={styles.answerInput}
+            placeholder="Numeric answer"
+            disabled={isReviewMode}
+            value={answered}
+            onChange={(e) =>
+              setAnswerFor?.(q.id, e.target.value)
+            }
+          />
+        )}
+      </div>
+
+      {/* AI HELP BUTTON */}
+      <button
+        onClick={sendQuestionHelp}
+        style={{
+          marginTop: 10,
+          padding: "6px 12px",
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.08)",
+          background: "rgba(59,130,246,0.20)",
+          color: "#fff",
+          fontWeight: 800,
+        }}
+      >
+        Ask AI Help
+      </button>
+
+      {/* REVIEW MODE RESULT */}
+      {detail && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: detail.isCorrect
+              ? "rgba(16,185,129,0.08)"
+              : "rgba(239,68,68,0.08)",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 800,
+              color: detail.isCorrect ? "#34d399" : "#f87171",
+            }}
+          >
+            {detail.isCorrect ? "Correct" : "Wrong"} — Your:{" "}
+            {detail.userAnswer ?? "—"} • Correct:{" "}
+            {detail.correctAnswer}
+          </div>
+          {detail.explanation && (
+            <div style={{ marginTop: 6 }}>{detail.explanation}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   EXAM MODE: FULLSCREEN + EXIT HANDLING
+============================================================ */
+function enableExamMode() {
+  examModeRef.current = true;
+
+  const el = document.documentElement;
+  if (el.requestFullscreen) {
+    el.requestFullscreen().catch(() => {});
+  }
+
+  window.addEventListener("beforeunload", beforeUnloadHandler);
+  document.addEventListener("fullscreenchange", fullscreenChangeHandler);
+}
+
+function disableExamMode() {
+  examModeRef.current = false;
+
+  window.removeEventListener("beforeunload", beforeUnloadHandler);
+  document.removeEventListener("fullscreenchange", fullscreenChangeHandler);
+
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+function beforeUnloadHandler(e: BeforeUnloadEvent) {
+  e.preventDefault();
+  e.returnValue =
+    "Exam in progress. Leaving will lose your answers. Are you sure?";
+  return e.returnValue;
+}
+
+function fullscreenChangeHandler() {
+  if (examModeRef.current && !document.fullscreenElement) {
+    const confirmExit = window.confirm(
+      "You left fullscreen. Submit the exam now? Cancel returns to exam."
+    );
+    if (confirmExit) {
+      submitAll();
+    } else {
+      // attempt re-entry
+      document.documentElement.requestFullscreen().catch(() => {
+        pushToast("Unable to re-enter fullscreen.", "error");
+      });
+    }
+  }
+}
+
+/* ============================================================
+   CHAT BAR (bottom)
+============================================================ */
+<div className={styles.chatBar}>
+  <label className={styles.uploadBtn} title="Upload material">
+    <input
+      type="file"
+      accept="*/*"
+      onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const form = new FormData();
+        form.append("file", f);
+        fetch(`${API}/upload/material`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        })
+          .then((r) => r.json())
+          .then((d) =>
+            d.ok ? pushToast("Uploaded", "success") : pushToast("Upload failed", "error")
+          )
+          .catch(() => pushToast("Upload error", "error"));
+      }}
+    />
+    <span>📤</span>
+  </label>
+
+  <input
+    className={styles.chatInput}
+    placeholder={
+      examMode ? "Chat disabled during exam" : "Ask focused questions…"
+    }
+    value={bottomChatInput}
+    disabled={examMode}
+    onChange={(e) => setBottomChatInput(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") sendBottomChat();
+    }}
+  />
+
+  <button
+    className={styles.sendBtn}
+    disabled={examMode}
+    onClick={sendBottomChat}
+  >
+    ➤
+  </button>
+</div>
+
+/* ============================================================
+   FLOATING SUBMIT BUTTON (Exam Mode)
+============================================================ */
+{examMode && questions.length > 0 && (
+  <div
+    style={{
+      position: "fixed",
+      bottom: 96,
+      left: 20,
+      right: 20,
+      display: "flex",
+      justifyContent: "center",
+      zIndex: 20000,
+    }}
+  >
+    <button
+      onClick={() => {
+        if (window.confirm("Submit exam now?")) submitAll();
+      }}
+      style={{
+        padding: "12px 20px",
+        borderRadius: 12,
+        background: "linear-gradient(90deg,#14b8a6,#3b82f6)",
+        color: "#fff",
+        fontWeight: 900,
+        border: "none",
+        width: "min(420px,90%)",
+      }}
+    >
+      SUBMIT ALL
+    </button>
+  </div>
+)}
+
+/* ============================================================
+   CHAT FAB + ChatPopup
+============================================================ */
+<button
+  className={styles.chatFab}
+  onClick={() => setChatOpen(true)}
+  title="Open chat assistant"
+>
+  💬
+</button>
+{chatOpen && (
+  <ChatPopup onClose={() => setChatOpen(false)} token={mentorToken} />
+)}
+
+/* ============================================================
+   SIDEBAR
+============================================================ */
+<OmSidebar
+  token={omToken}
+  onLoadSession={(id, type) => handleLoadSession(id, type)}
+/>
+
+/* ============================================================
+   TOASTS
+============================================================ */
+<div
+  style={{
+    position: "fixed",
+    right: 20,
+    bottom: 160,
+    zIndex: 30000,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  }}
+>
+  {toasts.map((t) => (
+    <div
+      key={t.id}
+      style={{
+        minWidth: 220,
+        maxWidth: 420,
+        padding: "10px 14px",
+        borderRadius: 10,
+        background:
+          t.kind === "error"
+            ? "linear-gradient(90deg,#f87171,#ef4444)"
+            : t.kind === "success"
+            ? "linear-gradient(90deg,#34d399,#10b981)"
+            : "rgba(255,255,255,0.04)",
+        color: t.kind ? "#041f1a" : "#e6eef7",
+        fontWeight: 700,
+        boxShadow: "0 8px 30px rgba(2,6,23,0.6)",
+      }}
+    >
+      {t.text}
+    </div>
+  ))}
+</div>

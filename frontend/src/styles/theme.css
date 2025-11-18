@@ -1,0 +1,76 @@
+:root {
+  /* 🎨 Brand Colors */
+  --primary: #14b8a6;
+  --secondary: #3b82f6;
+  --background-dark: #0f172a;
+  --accent-dark: #1e3a8a;
+  --neutral-light: #f3f4f6;
+
+  /* 🧢 Typography */
+  --font-main: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+
+  /* 🌫️ Shadows & Effects */
+  --shadow-card: 0 30px 80px -20px rgba(59, 130, 246, 0.35),
+    0 0 50px -10px rgba(20, 184, 166, 0.25);
+  --shadow-hover: 0 10px 25px rgba(20, 184, 166, 0.25);
+
+  /* 📏 Layout Variables */
+  --border-radius: 1.5rem;
+  --transition-speed: 0.3s;
+}
+
+/* 🧱 Universal Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 📱 Full-Viewport Fix */
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* ✅ Prevent scrollbars */
+  overscroll-behavior: none; /* ✅ Prevent pull-to-refresh */
+  touch-action: none; /* ✅ Prevent drag scroll on mobile */
+  font-family: var(--font-main);
+  background-color: var(--background-dark);
+  color: var(--neutral-light);
+}
+
+/* 🔘 Buttons */
+button {
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: all var(--transition-speed) ease;
+  border: none;
+  outline: none;
+}
+
+button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+/* 🔠 Text Rendering Improvements */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 💫 Animations Feel Natural with Framer Motion */
+motion-div,
+motion-section,
+motion-main {
+  will-change: transform, opacity;
+}
+
+/* 🌈 Scroll Unlock (for future pages that need scrolling) */
+.scrollable {
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}

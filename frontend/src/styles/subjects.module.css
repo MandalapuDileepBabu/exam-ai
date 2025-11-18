@@ -1,0 +1,563 @@
+/* =========================================================
+   MAIN PAGE LAYOUT
+   ========================================================= */
+.page {
+  min-height: 100vh;
+  width: 100%;
+  padding: 2.2rem;
+  box-sizing: border-box;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color: #e6eef7;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 45%, #0d9488 100%);
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+overflow: visible;/* IMPORTANT → prevents double scroll */
+}
+
+/* =========================================================
+   HEADER — now sticky
+   ========================================================= */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+  z-index: 9999 !important;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(8px);
+}
+
+.backBtn,
+.logoutBtn {
+  background: transparent;
+  color: #e6eef7;
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 0.5rem 0.9rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.title {
+  text-align: center;
+  flex: 1;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #e6eef7;
+}
+
+/* =========================================================
+   MAIN CONTENT LAYOUT
+   ========================================================= */
+.flowMain {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+/* Motivational text */
+.motivationText {
+  margin: 0;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+/* =========================================================
+   FILTER ROW — now sticky
+   ========================================================= */
+.filterRowInline {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  flex-wrap: nowrap;
+
+  position: sticky;
+  top: 64px; /* sits right below header */
+  z-index: 49;
+  backdrop-filter: blur(8px);
+  padding: 4px 0;
+}
+
+/* Dropdown container */
+.customSelectWrap {
+  position: relative;
+  display: inline-block;
+  min-width: 220px;
+  max-width: 520px;
+  z-index: 10001;
+}
+
+.customSelectTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  width: 100%;
+  background: rgba(255,255,255,0.02);
+  color: #e6eef7;
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 0.6rem 0.9rem;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.caret {
+  opacity: 0.9;
+  font-size: 0.9rem;
+}
+
+/* Dropdown panel */
+.customDropdown {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  background: rgba(255,255,255,0.01);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 0.4rem;
+  max-height: 360px;
+  min-height: 120px;
+  overflow-y: auto;
+  z-index: 10002;
+  width: 520px;
+  box-shadow: none;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  transform-origin: top center;
+  transform: translateY(-6px) scale(0.98);
+  opacity: 0;
+}
+.open {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.subjectList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 4px;
+}
+
+.subjectListItem {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 10px;
+  color: #e6eef7;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.subjectListItem:hover {
+  background: rgba(255,255,255,0.02);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.subjectSelected {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.12);
+  box-shadow: inset 0 0 18px rgba(255,255,255,0.02);
+}
+
+.noSubjects {
+  padding: 10px;
+  color: #e6eef7;
+  opacity: 0.9;
+  font-weight: 700;
+}
+
+.inlineSelect,
+.inlineNumber {
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+  color: #e6eef7;
+  font-weight: 700;
+}
+
+.inlineSelect {
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%23e6eef7' height='14' width='14' viewBox='0 0 24 24'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  appearance: none;
+  padding-right: 36px;
+}
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+.generateBtn {
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #14b8a6, #3b82f6);
+  color: white;
+  border: none;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* =========================================================
+   ⭐ SCROLL REGION (MAIN WORK AREA)
+   ========================================================= */
+
+.scrollRegion {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  padding: 1rem;
+  padding-bottom: 160px; /* prevents overlap with chat bar */
+}
+
+/* exam mode → bigger bottom gap */
+.examModeScroll {
+  padding-bottom: 50px !important;
+}
+
+/* OLD contentArea (kept for backward compatibility but NO scroll) */
+.contentArea {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* =========================================================
+   CHAT MESSAGES (subject scoped)
+   ========================================================= */
+.messageCard {
+  max-width: 80%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  box-shadow: 0 8px 24px rgba(2,6,23,0.45);
+}
+.messageUser {
+  align-self: flex-end;
+  background: linear-gradient(90deg,#14b8a6,#3b82f6);
+  color: #041f1a;
+}
+.messageAssistant {
+  align-self: flex-start;
+  background: rgba(255,255,255,0.03);
+  color: #e6eef7;
+}
+
+.messageText {
+  font-size: 14px;
+}
+
+/* =========================================================
+   QUESTIONS + OPTIONS (ExamBody)
+   ========================================================= */
+.questionCard {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.questionHeader {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.qIndex {
+  font-weight: 900;
+  min-width: 22px;
+}
+.qText {
+  font-weight: 700;
+}
+
+.optionsWrap {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.optionItem {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-weight: 700;
+}
+
+.answerInput {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.04);
+  background: transparent;
+  color: #e6eef7;
+  font-weight: 700;
+}
+
+/* =========================================================
+   CHAT BAR (BOTTOM FIXED)
+   ========================================================= */
+.chatBar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(980px, calc(100% - 32px));
+
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+
+  z-index: 10005;
+}
+
+.uploadBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0.45rem;
+  border-radius: 999px;
+  color: #e6eef7;
+  font-size: 1.05rem;
+}
+.uploadBtn input {
+  display: none;
+}
+
+.chatInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e6eef7;
+  font-weight: 600;
+  padding: 0.45rem 0.6rem;
+}
+
+.sendBtn {
+  background: rgba(255,255,255,0.03);
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  border: none;
+  color: #e6eef7;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+/* =========================================================
+   FLOATING CHAT FAB
+   ========================================================= */
+.chatFab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 52px;
+  height: 52px;
+
+  border-radius: 999px;
+  background: linear-gradient(90deg, #14b8a6, #3b82f6);
+  border: none;
+  color: white;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 10px 30px rgba(4,10,20,0.6);
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 20001;
+  transition: transform 0.12s ease;
+}
+.chatFab:hover {
+  transform: translateY(-3px) scale(1.02);
+}
+
+/* =========================================================
+   SCROLLBAR STYLING
+   ========================================================= */
+.scrollRegion::-webkit-scrollbar,
+.customDropdown::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollRegion::-webkit-scrollbar-thumb,
+.customDropdown::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: 999px;
+}
+.scrollRegion::-webkit-scrollbar-track,
+.customDropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* =========================================================
+   Mentorship Chat Popup (unchanged)
+   ========================================================= */
+.chatPopupPanel {
+  position: fixed;
+  width: 380px;
+  height: 480px;
+  background: linear-gradient(180deg, rgba(9,12,20,0.86), rgba(12,16,24,0.88));
+  border-radius: 12px;
+  box-shadow: 0 14px 44px rgba(2,6,23,0.65);
+  border: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  z-index: 20050;
+}
+
+.chatPopupHeader {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  cursor: grab;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  color: #e6eef7;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.chatPopupMessages {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chatBubbleUser {
+  align-self: flex-end;
+  max-width: 76%;
+  padding: 8px 10px;
+  background: linear-gradient(90deg,#14b8a6,#3b82f6);
+  color: #041f1a;
+  border-radius: 10px;
+}
+
+.chatBubbleAI {
+  align-self: flex-start;
+  max-width: 76%;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.07);
+  color: #e6eef7;
+  border-radius: 10px;
+}
+
+.chatPopupInputRow {
+  padding: 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chatPopupInput {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #e6eef7;
+  font-size: 13px;
+}
+
+.chatPopupSendBtn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: linear-gradient(90deg,#14b8a6,#3b82f6);
+  border: none;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+.scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100vh - 64px - 72px); /* accounts for header/filter/chatBar heights */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.fixedSubmit {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20050;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.fixedSubmitBtn {
+  pointer-events: all;
+  padding: 16px 28px;
+  border-radius: 15px;
+  background: linear-gradient(90deg,#14b8a6,#3b82f6);
+  color: #fff;
+  font-weight: 900;
+  border: none;
+  width: min(460px,90%);
+  margin: 16px 0;
+  font-size: 1.18rem;
+  box-shadow: 0 10px 32px rgba(14,22,38,0.15);
+  transition: background 0.12s;
+}
+.fixedSubmitBtn:hover {
+  background: linear-gradient(90deg,#0ea5e9,#059669,#14b8a6,#3b82f6);
+}
+
+.chatBar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 56px; /* height of submit button below */
+  width: min(980px, calc(100% - 32px));
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  z-index: 10005;
+}
+.sidebarToggleBtn {
+  background: transparent;
+  border: none;
+  color: #e6eef7;
+  font-size: 24px;
+  font-weight: 900;
+  padding: 0 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chatBarSeparator {
+  height: 1px;
+  background-color: rgba(230, 238, 247, 0.15); /* subtle translucent light line */
+  margin-bottom: 12px; /* some spacing below line */
+  position: sticky;
+  bottom: 72px; /* height of chat bar + some padding */
+  z-index: 10;
+}
